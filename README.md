@@ -1,3 +1,5 @@
+<p align="center"><img src="https://raw.githubusercontent.com/go-lemmy/brand/main/social/go-lemmy.png" alt="go-lemmy/lemmy" width="720"></p>
+
 # go-lemmy / lemmy
 
 [![CI](https://github.com/go-lemmy/lemmy/actions/workflows/ci.yml/badge.svg)](https://github.com/go-lemmy/lemmy/actions/workflows/ci.yml)
