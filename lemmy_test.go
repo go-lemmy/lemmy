@@ -184,3 +184,58 @@ func (badBodyRoundTripper) RoundTrip(*http.Request) (*http.Response, error) {
 type errReader struct{}
 
 func (errReader) Read([]byte) (int, error) { return 0, errors.New("read boom") }
+
+func TestSearchCommunitiesMapsAndDefaults(t *testing.T) {
+	var gotPath, gotQuery string
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		gotPath, gotQuery = r.URL.Path, r.URL.RawQuery
+		io.WriteString(w, `{"communities":[
+			{"community":{"name":"golang","title":"Go","description":"gophers","icon":"https://i/ic.png","actor_id":"https://lemmy.world/c/golang","nsfw":false},"counts":{"subscribers":1234}}]}`)
+	}))
+	defer srv.Close()
+
+	res, err := New(srv.URL).SearchCommunities(context.Background(), "go", 0)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if gotPath != "/api/v3/search" {
+		t.Fatalf("path = %q", gotPath)
+	}
+	if !strings.Contains(gotQuery, "q=go") || !strings.Contains(gotQuery, "type_=Communities") || !strings.Contains(gotQuery, "limit=20") {
+		t.Fatalf("query = %q", gotQuery)
+	}
+	if len(res.Communities) != 1 {
+		t.Fatalf("communities = %d", len(res.Communities))
+	}
+	c := res.Communities[0]
+	want := Community{Name: "golang", Title: "Go", Description: "gophers", Icon: "https://i/ic.png", ActorID: "https://lemmy.world/c/golang", Subscribers: 1234, NSFW: false}
+	if c != want {
+		t.Fatalf("community = %+v, want %+v", c, want)
+	}
+}
+
+func TestSearchCommunitiesExplicitLimit(t *testing.T) {
+	var gotQuery string
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		gotQuery = r.URL.RawQuery
+		io.WriteString(w, `{"communities":[]}`)
+	}))
+	defer srv.Close()
+	if _, err := New(srv.URL).SearchCommunities(context.Background(), "x", 5); err != nil {
+		t.Fatal(err)
+	}
+	if !strings.Contains(gotQuery, "limit=5") {
+		t.Fatalf("explicit limit not sent: %q", gotQuery)
+	}
+}
+
+func TestSearchCommunitiesError(t *testing.T) {
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.WriteHeader(http.StatusInternalServerError)
+		io.WriteString(w, `boom`)
+	}))
+	defer srv.Close()
+	if _, err := New(srv.URL).SearchCommunities(context.Background(), "x", 0); err == nil {
+		t.Fatal("expected an error on 500")
+	}
+}
