@@ -146,6 +146,24 @@ type PostList struct {
 	Posts []Post
 }
 
+// Community is one community-search hit: enough to show a discovery row and
+// subscribe. Name is the local handle ("golang"); ActorID is the federated URL
+// ("https://lemmy.world/c/golang") that identifies it across instances.
+type Community struct {
+	Name        string
+	Title       string
+	Description string
+	Icon        string
+	ActorID     string
+	Subscribers int
+	NSFW        bool
+}
+
+// CommunityList is a page of community-search results.
+type CommunityList struct {
+	Communities []Community
+}
+
 // PostsOptions configures a Posts request.
 type PostsOptions struct {
 	Community string // community name; empty = instance-wide
@@ -179,6 +197,54 @@ type postListResponse struct {
 			Comments int `json:"comments"`
 		} `json:"counts"`
 	} `json:"posts"`
+}
+
+// searchCommunitiesResponse mirrors the community slice of /api/v3/search.
+type searchCommunitiesResponse struct {
+	Communities []struct {
+		Community struct {
+			Name        string `json:"name"`
+			Title       string `json:"title"`
+			Description string `json:"description"`
+			Icon        string `json:"icon"`
+			ActorID     string `json:"actor_id"`
+			NSFW        bool   `json:"nsfw"`
+		} `json:"community"`
+		Counts struct {
+			Subscribers int `json:"subscribers"`
+		} `json:"counts"`
+	} `json:"communities"`
+}
+
+// SearchCommunities GETs /api/v3/search?type_=Communities for communities
+// matching query — a public read used to discover communities to subscribe to.
+// limit caps the page (0 → 20).
+func (c *Client) SearchCommunities(ctx context.Context, query string, limit int) (*CommunityList, error) {
+	if limit == 0 {
+		limit = 20
+	}
+	q := url.Values{}
+	q.Set("q", query)
+	q.Set("type_", "Communities")
+	q.Set("limit", strconv.Itoa(limit))
+
+	var raw searchCommunitiesResponse
+	if err := c.do(ctx, http.MethodGet, "/search", q, nil, &raw); err != nil {
+		return nil, err
+	}
+	out := &CommunityList{Communities: make([]Community, 0, len(raw.Communities))}
+	for _, v := range raw.Communities {
+		out.Communities = append(out.Communities, Community{
+			Name:        v.Community.Name,
+			Title:       v.Community.Title,
+			Description: v.Community.Description,
+			Icon:        v.Community.Icon,
+			ActorID:     v.Community.ActorID,
+			Subscribers: v.Counts.Subscribers,
+			NSFW:        v.Community.NSFW,
+		})
+	}
+	return out, nil
 }
 
 // Posts GETs /api/v3/post/list with the options as query params.
