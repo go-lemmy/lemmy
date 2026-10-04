@@ -1,3 +1,3 @@
 module github.com/go-lemmy/lemmy
 
-go 1.26.4
+go 1.27.1
